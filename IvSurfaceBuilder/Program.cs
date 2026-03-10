@@ -7,8 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddLogging();
+builder.Services.AddMemoryCache(); 
 
-// Add service dependencies with proper abstraction
+
 builder.Services.AddSingleton<InstrumentFilter>();
 builder.Services.AddScoped<IDeribitClient, DeribitClient>();
 builder.Services.AddScoped<IIvSurfaceService, IvSurfaceService>();

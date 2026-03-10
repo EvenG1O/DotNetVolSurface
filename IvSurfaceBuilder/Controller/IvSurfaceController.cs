@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using IvSurfaceBuilder.Models;
 using IvSurfaceBuilder.Services;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace IvSurfaceBuilder.Controllers;
 
@@ -12,11 +13,16 @@ public class IvSurfaceController : ControllerBase
 {
     private readonly IIvSurfaceService _service;
     private readonly ILogger<IvSurfaceController> _logger;
+    private readonly IMemoryCache _cache;
+    private const int CacheMinutes = 5;
 
-    public IvSurfaceController(IIvSurfaceService service, ILogger<IvSurfaceController> logger)
+    public IvSurfaceController(IIvSurfaceService service, ILogger<IvSurfaceController> logger,IMemoryCache cache )
     {
         _service = service;
         _logger = logger;
+        _cache = cache;
+        
+
     }
 
     [HttpGet]
@@ -24,9 +30,23 @@ public class IvSurfaceController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Fetching IV surface for currency: {Currency}", currency);
-            var surface = await _service.BuildSurfaceAsync(currency.ToUpper());
+          var cacheKey = $"iv_surface_{currency.ToUpper()}";
+
+            if(_cache.TryGetValue(cacheKey, out IvSurface? cachedSurface) && cachedSurface != null)
+            {
+                _logger.LogInformation("Cache hit for IV surface of {Currency}", currency);
+                return Ok(cachedSurface);
+            }
+
+            _logger.LogInformation("Cache miss for IV surface of {Currency}. Building new surface.", currency);
+
+            var  surface = await _service.BuildSurfaceAsync(currency);
+
+            _cache.Set(cacheKey, surface, TimeSpan.FromMinutes(CacheMinutes));
             return Ok(surface);
+
+
+
         }
         catch (InvalidOperationException ex)
         {
