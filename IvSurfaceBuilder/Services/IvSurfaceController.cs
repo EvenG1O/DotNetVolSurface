@@ -17,12 +17,15 @@ public class IvSurfaceService : IIvSurfaceService
     {
         try
         {
+            var timeStamp = DateTime.UtcNow;
             var atmPrice = await _client.GetIndexPriceAsync(currency.ToLower());
             var allInstruments = await _client.GetOptionInstrumentsAsync(currency);
             var filtered = _filter.Filter(allInstruments, atmPrice);
+         
 
             var ivPoints = await _client.FetchIvPointsAsync(
                 filtered,
+                currency,
                 atmPrice,
                 (current, total) => System.Diagnostics.Debug.WriteLine($"  Progress: {current}/{total}")
             );
@@ -30,7 +33,7 @@ public class IvSurfaceService : IIvSurfaceService
             return new IvSurface
             {
                 AtmPrice = atmPrice,
-                Timestamp = DateTime.UtcNow,
+                Timestamp = timeStamp,
                 Currency = currency,
                 Expiries = ivPoints
                     .GroupBy(x => x.Expiry)

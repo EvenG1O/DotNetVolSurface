@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using IvSurfaceBuilder.Models;
 using Microsoft.Extensions.Caching.Memory;
@@ -15,13 +14,14 @@ public class DeribitClient : IDeribitClient
 
     private const string IndexPriceCacheKey = "index_price_";
     private const string InstrumentsCacheKey = "instruments_";
-    private const string IvPointCacheKey = "iv_point_";
+    private const string IvPointsCacheKey = "iv_points_";
 
     private static readonly TimeSpan IndexPriceCacheDuration = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan InstrumentsCacheDuration = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan IvPointCacheDuration = TimeSpan.FromMinutes(5);
 
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _instrumentSemaphores = new();
+    private static readonly SemaphoreSlim _fetchIvPointsSemaphore = new(1, 1);
+
 
     public DeribitClient(HttpClient http, IMemoryCache cache)
     {
@@ -29,17 +29,14 @@ public class DeribitClient : IDeribitClient
         _cache = cache;
     }
 
-    private static SemaphoreSlim GetSemaphore(string instrumentName)
-    {
-        return _instrumentSemaphores.GetOrAdd(instrumentName, _ => new SemaphoreSlim(1, 1));
-    }
+
 
     public async Task<decimal> GetIndexPriceAsync(string currency = "btc")
     {
-        
+
         var cacheKey = IndexPriceCacheKey + currency.ToLower();
 
-        
+
         if (_cache.TryGetValue(cacheKey, out decimal cachedPrice))
         {
             System.Diagnostics.Debug.WriteLine($"Cache hit — index price {currency}");
@@ -56,7 +53,7 @@ public class DeribitClient : IDeribitClient
                 .GetProperty("index_price")
                 .GetDecimal();
 
-          
+
             _cache.Set(cacheKey, price, IndexPriceCacheDuration);
             System.Diagnostics.Debug.WriteLine($"Cache set — index price {currency} = {price}");
 
@@ -70,10 +67,10 @@ public class DeribitClient : IDeribitClient
 
     public async Task<List<RawInstrument>> GetOptionInstrumentsAsync(string currency = "BTC")
     {
-       
+
         var cacheKey = InstrumentsCacheKey + currency.ToUpper();
 
-       
+
         if (_cache.TryGetValue(cacheKey, out List<RawInstrument>? cachedInstruments)
             && cachedInstruments != null)
         {
@@ -101,7 +98,7 @@ public class DeribitClient : IDeribitClient
                 instruments.Add(new RawInstrument(name, expiry, strike, optionType));
             }
 
-      
+
             _cache.Set(cacheKey, instruments, InstrumentsCacheDuration);
             System.Diagnostics.Debug.WriteLine($"Cache set — {instruments.Count} instruments for {currency}");
 
@@ -115,49 +112,60 @@ public class DeribitClient : IDeribitClient
 
     public async Task<List<IvPoint>> FetchIvPointsAsync(
         List<RawInstrument> instruments,
+        string currency,
         decimal atmPrice,
         Action<int, int> onProgress)
     {
-        ArgumentNullException.ThrowIfNull(instruments);
-        ArgumentNullException.ThrowIfNull(onProgress);
+        var cacheKeyFlag = IvPointsCacheKey + currency.ToUpper();
 
-        var ivPoints = new List<IvPoint>();
-
-        for (int i = 0; i < instruments.Count; i += BatchSize)
+        if (_cache.TryGetValue(cacheKeyFlag, out List<IvPoint>? cachedPoints) && cachedPoints != null)
         {
-            var batch = instruments.Skip(i).Take(BatchSize);
-            var batchTasks = batch.Select(inst => FetchSingleIvPointAsync(inst, atmPrice)).ToList();
-            var batchResults = await Task.WhenAll(batchTasks);
-            ivPoints.AddRange(batchResults.Where(p => p != null)!);
-
-            onProgress(Math.Min(i + BatchSize, instruments.Count), instruments.Count);
-
-            if (i + BatchSize < instruments.Count)
-                await Task.Delay(BatchDelayMs);
+            onProgress(instruments.Count, instruments.Count);
+            return cachedPoints;
         }
 
-        return ivPoints;
+        await _fetchIvPointsSemaphore.WaitAsync();
+
+        try
+        {
+            
+
+            if (_cache.TryGetValue(cacheKeyFlag, out cachedPoints) && cachedPoints != null)
+            {
+                onProgress(instruments.Count, instruments.Count);
+                return cachedPoints;
+            }
+
+            var IvPoints = new List<IvPoint>();
+
+            for (int i = 0; i < instruments.Count; i += BatchSize)
+            {
+
+                var batch = instruments.Skip(i).Take(BatchSize);
+                var batchTasks = batch.Select(inst => FetchSingleIvPointAsync(inst, atmPrice)).ToList();
+                var batchResults = await Task.WhenAll(batchTasks);
+                IvPoints.AddRange(batchResults.Where(p => p != null)!);
+
+                onProgress(Math.Min(i + BatchSize, instruments.Count), instruments.Count);
+
+                if (i + BatchSize < instruments.Count) await Task.Delay(BatchDelayMs);
+
+            }
+            _cache.Set(cacheKeyFlag, IvPoints, IvPointCacheDuration);
+            return IvPoints;
+
+        }
+
+        finally { _fetchIvPointsSemaphore.Release(); }
+
     }
 
     private async Task<IvPoint?> FetchSingleIvPointAsync(RawInstrument inst, decimal atmPrice)
     {
-        var cacheKey = IvPointCacheKey + inst.Name;
-        var semaphore = GetSemaphore(inst.Name);
 
-        if (_cache.TryGetValue(cacheKey, out IvPoint? cachedPoint))
-        {
-            System.Diagnostics.Debug.WriteLine($"Cache hit — {inst.Name}");
-            return cachedPoint;
-        }
-
-        await semaphore.WaitAsync();
         try
         {
-            if (_cache.TryGetValue(cacheKey, out cachedPoint))
-            {
-                System.Diagnostics.Debug.WriteLine($"Cache hit (after wait) — {inst.Name}");
-                return cachedPoint;
-            }
+
 
             var url = $"https://www.deribit.com/api/v2/public/get_order_book?instrument_name={inst.Name}";
             var response = await _http.GetStringAsync(url);
@@ -172,8 +180,7 @@ public class DeribitClient : IDeribitClient
             {
                 var moneyness = Math.Round(inst.Strike / atmPrice, 4);
                 var ivPoint = new IvPoint(inst.Expiry, inst.Strike, inst.Type, markIv, moneyness);
-                _cache.Set(cacheKey, ivPoint, IvPointCacheDuration);
-                System.Diagnostics.Debug.WriteLine($"Cache set — {inst.Name}");
+
                 return ivPoint;
             }
 
@@ -184,9 +191,6 @@ public class DeribitClient : IDeribitClient
             System.Diagnostics.Debug.WriteLine($"✘ {inst.Name} → {ex.Message}");
             return null;
         }
-        finally
-        {
-            semaphore.Release();
-        }
+
     }
 }

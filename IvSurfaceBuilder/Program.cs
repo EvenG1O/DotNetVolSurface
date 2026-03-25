@@ -7,11 +7,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddLogging();
-builder.Services.AddMemoryCache(); 
+builder.Services.AddMemoryCache();
 
 
 builder.Services.AddSingleton<InstrumentFilter>();
-builder.Services.AddScoped<IDeribitClient, DeribitClient>();
+builder.Services.AddSingleton<IDeribitClient, DeribitClient>();
 builder.Services.AddScoped<IIvSurfaceService, IvSurfaceService>();
 
 // CORS configuration
@@ -21,7 +21,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
             "http://localhost:5173",  // Vite default
-            "http://localhost:3000"   
+            "http://localhost:3000"
         )
         .AllowAnyHeader()
         .AllowAnyMethod()

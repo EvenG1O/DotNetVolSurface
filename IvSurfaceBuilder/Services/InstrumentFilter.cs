@@ -1,9 +1,9 @@
 using IvSurfaceBuilder.Models;
-using IvSurfaceBuilder.Services;
+
 
 namespace IvSurfaceBuilder.Services;
 
-public class InstrumentFilter
+public class InstrumentFilter 
 {
     private const int MaxExpiries = 6;
     private const decimal FilterPct = 0.15m;

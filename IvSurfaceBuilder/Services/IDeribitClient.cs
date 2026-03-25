@@ -8,11 +8,12 @@ public interface IDeribitClient
 
     Task<decimal> GetIndexPriceAsync(string currency = "btc");
 
-  Task<List<RawInstrument>> GetOptionInstrumentsAsync(string currency = "BTC");
+    Task<List<RawInstrument>> GetOptionInstrumentsAsync(string currency = "BTC");
 
 
     Task<List<IvPoint>> FetchIvPointsAsync(
      List<RawInstrument> instruments,
+        string currency,
         decimal atmPrice,
         Action<int, int> onProgress);
 }
