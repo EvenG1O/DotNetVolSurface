@@ -11,7 +11,7 @@ public class WebSocketMiddleware
     private readonly RequestDelegate _next;
     private readonly WebSocketHub _hub;
     private readonly ILogger<WebSocketMiddleware> _logger;
-    private readonly string[] _allowedOrigins;
+    private readonly string _allowedOrigin;
 
     public WebSocketMiddleware(RequestDelegate next, WebSocketHub hub, ILogger<WebSocketMiddleware> logger, IConfiguration configuration)
     {
@@ -19,9 +19,7 @@ public class WebSocketMiddleware
         _hub = hub;
         _logger = logger;
         
-var allowedOrigin = configuration["AllowedOrigin"] ?? "https://eveng1o.github.io";
-    _allowedOrigins = new[] { allowedOrigin };
-
+        _allowedOrigin = configuration["AllowedOrigin"] ?? "https://eveng1o.github.io";
     }
 
     public async Task InvokeAsync(HttpContext context)
