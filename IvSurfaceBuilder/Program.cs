@@ -20,17 +20,16 @@ builder.Services.AddSingleton<WebSocketHub>();
 builder.Services.AddHostedService<VolSurfaceStreamService>();
 
 // CORS configuration
+var allowedOrigin = builder.Configuration["AllowedOrigin"] ?? "https://eveng1o.github.io";
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactAppPolicy", policy =>
     {
-        policy.WithOrigins(
-            "http://localhost:5173",  // Vite default
-            "http://localhost:3000"
-        )
-        .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials();
+        policy.WithOrigins(allowedOrigin)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 

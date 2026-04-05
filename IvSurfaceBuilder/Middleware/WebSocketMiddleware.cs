@@ -11,12 +11,17 @@ public class WebSocketMiddleware
     private readonly RequestDelegate _next;
     private readonly WebSocketHub _hub;
     private readonly ILogger<WebSocketMiddleware> _logger;
+    private readonly string[] _allowedOrigins;
 
-    public WebSocketMiddleware(RequestDelegate next, WebSocketHub hub, ILogger<WebSocketMiddleware> logger)
+    public WebSocketMiddleware(RequestDelegate next, WebSocketHub hub, ILogger<WebSocketMiddleware> logger, IConfiguration configuration)
     {
         _next = next;
         _hub = hub;
         _logger = logger;
+        
+var allowedOrigin = configuration["AllowedOrigin"] ?? "https://eveng1o.github.io";
+    _allowedOrigins = new[] { allowedOrigin };
+
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -31,6 +36,18 @@ public class WebSocketMiddleware
         {
             context.Response.StatusCode = 400;
             await context.Response.WriteAsync("Expected a WebSocket request.");
+            return;
+        }
+
+        var origin = context.Request.Headers.Origin.ToString();
+        var isAllowed = !string.IsNullOrEmpty(origin) && 
+                        origin.Equals(_allowedOrigin, StringComparison.OrdinalIgnoreCase);
+
+        if (!isAllowed)
+        {
+            _logger.LogWarning("WebSocket connection rejected from unauthorized origin: {Origin}", origin);
+            context.Response.StatusCode = 403;
+            await context.Response.WriteAsync("Origin not allowed");
             return;
         }
 
