@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using IvSurfaceBuilder.Services;
+using IvSurfaceBuilder.Models;
+using System.Net.WebSockets;
 
 namespace IvSurfaceBuilder.Controllers;
 
@@ -24,16 +26,19 @@ public class StreamStatusController : ControllerBase
     [HttpGet]
     public IActionResult GetStatus()
     {
-        var status = new
+        var status = new SocketStatus
         {
-            deribitConnected = _wsClient.IsConnected,
-            subscribedInstruments = _wsClient.ActiveSubscriptions.Count,
-            maxInstruments = 300, // as configured in appsettings
-            connectedClients = _hub.ConnectedClients,
-            lastSurfaceUpdate = _streamService?.LastSurfaceUpdate,
-            nextInstrumentRefresh = _streamService?.NextInstrumentRefresh,
-            tickersReceived = _wsClient.TickersReceived
+              
+            DeribitConnected = _wsClient.IsConnected,
+            SubscribedInstruments = _wsClient.ActiveSubscriptions.Count,
+            MaxInstruments = 300,
+            LastSurfaceUpdate = _streamService?.LastSurfaceUpdate,
+            NextInstrumentRefresh = _streamService?.NextInstrumentRefresh,
+            TickersReceived = _wsClient.TickersReceived
+
+
         };
+     
 
         return Ok(status);
     }
