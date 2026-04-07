@@ -81,7 +81,7 @@ public class WebSocketMiddleware
         }
     }
 
-  /// Reads from the client WS until it disconnects.
+    /// Reads from the client WS until it disconnects.
     /// We don't expect any meaningful messages from the client — this just
     /// keeps the middleware alive and detects disconnection.
  
